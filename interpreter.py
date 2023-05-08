@@ -84,7 +84,7 @@ def op_print(aipl: AIPLInterpreter, v: str) -> str:
 
 if __name__ == "__main__":
     script = """
-    !join v=["hello", "world"] sep="-"
+    !join v=["hello", "world"] sep="- "
     !split sep="-"
     !print
     """
