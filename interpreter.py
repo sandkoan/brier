@@ -1,19 +1,22 @@
 import re
-from typing import List, Callable, Dict, Any
+from typing import Callable, Any
+
 
 # Operator definition
-def defop(name: str, rankin: int, rankout: int, arity: int) -> Callable:
+def defop(name: str, rankin: int | float, rankout: int | float, arity: int) -> Callable:
     def decorator(func: Callable) -> Callable:
         func.aipl_name = name
         func.aipl_rankin = rankin
         func.aipl_rankout = rankout
         func.aipl_arity = arity
         return func
+
     return decorator
+
 
 class AIPLInterpreter:
     def __init__(self):
-        self.operators: Dict[str, Callable] = {}
+        self.operators: dict[str, Callable] = {}
         self.register_operators()
 
     def register_operators(self):
@@ -21,18 +24,16 @@ class AIPLInterpreter:
             if hasattr(obj, "aipl_name"):
                 self.operators[obj.aipl_name] = obj
 
-    def parse_args(self, arg_line: str) -> Dict[str, Any]:
+    def parse_args(self, arg_line: str) -> dict[str, Any]:
         args = {}
-        arg_parts = re.split(r'\s+(?=[^[\]]*(?:\[(?:[^[\]]*\])*\])*[^[\]]*$)', arg_line)
-        for a in arg_parts:
-            if not a:
-                continue
-            k, v = a.split("=", 1) if "=" in a else (a, True)
+        arg_parts = re.findall(r"(\w+)=((?:\[[^\]]*\])|(?:\"[^\"]*\")|\S+)", arg_line)
+        for k, v in arg_parts:
             if v.startswith("[") and v.endswith("]"):
                 v = [x.strip().strip('"') for x in v[1:-1].split(",")]
+            elif v.startswith('"') and v.endswith('"'):
+                v = v[1:-1]
             args[k] = v
         return args
-
 
     def call_operator(self, op_name: str, **kwargs) -> Any:
         op = self.operators.get(op_name)
@@ -44,14 +45,14 @@ class AIPLInterpreter:
     def process_line(self, line: str, prev_result: Any) -> Any:
         line = line.strip()
         if not line or line.startswith("#"):
-            return None
+            return prev_result
 
         if line.startswith("!"):
             parts = line[1:].split(maxsplit=1)
             cmd, arg_line = parts[0], parts[1] if len(parts) > 1 else ""
             args = self.parse_args(arg_line)
-            if 'v' not in args and prev_result is not None:
-                args['v'] = prev_result
+            if "v" not in args and prev_result is not None:
+                args["v"] = prev_result
             return self.call_operator(cmd, **args)
         else:
             return line
@@ -66,12 +67,14 @@ class AIPLInterpreter:
 
 # Operator implementations
 @defop("join", rankin=1, rankout=0, arity=1)
-def op_join(aipl: AIPLInterpreter, v: List[str], sep=" ") -> str:
+def op_join(aipl: AIPLInterpreter, v: list[str], sep=" ") -> str:
     return sep.join(v)
 
+
 @defop("split", rankin=1, rankout=1, arity=1)
-def op_split(aipl: AIPLInterpreter, v: str, sep=" ") -> List[str]:
+def op_split(aipl: AIPLInterpreter, v: str, sep=" ") -> list[str]:
     return v.split(sep)
+
 
 @defop("print", rankin=1, rankout=1, arity=1)
 def op_print(aipl: AIPLInterpreter, v: str) -> str:
@@ -88,4 +91,19 @@ if __name__ == "__main__":
 
     interpreter = AIPLInterpreter()
     result = interpreter.process_script(script)
-    print(result)
+
+"""
+`@defop` registers the decorated function as the named operator.
+rankin is what the function takes as input:
+`0`: a scalar (number or string)
+0.5`: a whole row
+`1`: a whole column of values
+`2`: the whole table
+rankout is what the function returns
+`0`: a scalar value
+`0.5`: a dict of values
+`1`: a column of values
+`2`: a whole table
+`arity` for how many operands it takes
+
+"""
