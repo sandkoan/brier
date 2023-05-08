@@ -41,7 +41,7 @@ class AIPLInterpreter:
         else:
             raise ValueError(f"Unknown operator: {op_name}")
 
-    def process_line(self, line: str) -> Any:
+    def process_line(self, line: str, prev_result: Any) -> Any:
         line = line.strip()
         if not line or line.startswith("#"):
             return None
@@ -50,6 +50,8 @@ class AIPLInterpreter:
             parts = line[1:].split(maxsplit=1)
             cmd, arg_line = parts[0], parts[1] if len(parts) > 1 else ""
             args = self.parse_args(arg_line)
+            if 'v' not in args and prev_result is not None:
+                args['v'] = prev_result
             return self.call_operator(cmd, **args)
         else:
             return line
@@ -58,9 +60,7 @@ class AIPLInterpreter:
         lines = script.split("\n")
         result = None
         for line in lines:
-            temp_result = self.process_line(line)
-            if temp_result is not None:
-                result = temp_result
+            result = self.process_line(line, result)
         return result
 
 
@@ -73,19 +73,19 @@ def op_join(aipl: AIPLInterpreter, v: List[str], sep=" ") -> str:
 def op_split(aipl: AIPLInterpreter, v: str, sep=" ") -> List[str]:
     return v.split(sep)
 
-@defop("echo", rankin=1, rankout=1, arity=1)
-def op_echo(aipl: AIPLInterpreter, v: str) -> str:
+@defop("print", rankin=1, rankout=1, arity=1)
+def op_print(aipl: AIPLInterpreter, v: str) -> str:
     print(v)
     return v
 
 
+if __name__ == "__main__":
+    script = """
+    !join v=["hello", "world"] sep="-"
+    !split sep="-"
+    !print
+    """
 
-script = """
-!join v=["hello", "world"] sep="-"
-# !split v="hello-world" sep="-"
-!echo
-"""
-
-interpreter = AIPLInterpreter()
-result = interpreter.process_script(script)
-print(result)
+    interpreter = AIPLInterpreter()
+    result = interpreter.process_script(script)
+    print(result)
