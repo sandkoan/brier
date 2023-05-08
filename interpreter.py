@@ -26,14 +26,25 @@ class AIPLInterpreter:
 
     def parse_args(self, arg_line: str) -> dict[str, Any]:
         args = {}
-        arg_parts = re.findall(r"(\w+)=((?:\[[^\]]*\])|(?:\"[^\"]*\")|\S+)", arg_line)
+        arg_parts = re.findall(r'(\w+)=((?:\[[^\]]*\])|(?:\"[^\"]*\")|\S+)', arg_line)
         for k, v in arg_parts:
             if v.startswith("[") and v.endswith("]"):
-                v = [x.strip().strip('"') for x in v[1:-1].split(",")]
+                v = [self.parse_number_or_str(x.strip()) for x in v[1:-1].split(",")]
             elif v.startswith('"') and v.endswith('"'):
                 v = v[1:-1]
+            else:
+                v = self.parse_number_or_str(v)
             args[k] = v
         return args
+
+    def parse_number_or_str(self, value: str) -> Any:
+        try:
+            return int(value)
+        except ValueError:
+            try:
+                return float(value)
+            except ValueError:
+                return value
 
     def call_operator(self, op_name: str, **kwargs) -> Any:
         op = self.operators.get(op_name)
@@ -70,11 +81,13 @@ class AIPLInterpreter:
 def op_join(aipl: AIPLInterpreter, v: list[str], sep=" ") -> str:
     return sep.join(v)
 
-
 @defop("split", rankin=1, rankout=1, arity=1)
 def op_split(aipl: AIPLInterpreter, v: str, sep=" ") -> list[str]:
     return v.split(sep)
 
+@defop("sum", rankin=1, rankout=0, arity=1)
+def op_sum(aipl: AIPLInterpreter, v: list[float]) -> float:
+    return sum(v)
 
 @defop("print", rankin=1, rankout=1, arity=1)
 def op_print(aipl: AIPLInterpreter, v: str) -> str:
@@ -84,8 +97,9 @@ def op_print(aipl: AIPLInterpreter, v: str) -> str:
 
 if __name__ == "__main__":
     script = """
-    !join v=["hello", "world"] sep="- "
-    !split sep="-"
+    # !join v=["hello", "world"] sep="- "
+    # !split sep="-"
+    !sum v=[1, 2, 3, 4, 5]
     !print
     """
 
@@ -106,4 +120,10 @@ rankout is what the function returns
 `2`: a whole table
 `arity` for how many operands it takes
 
+- split lines onto multiple lines with `\`
+- refer to output from an arbitrary line with `!` and the line number
+- parallel processing with `&`
+- table processing with `|` and `||`
+- `?` is a query
+- take input from console with `!input`
 """
