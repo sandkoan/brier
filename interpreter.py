@@ -1,4 +1,6 @@
+import json
 import random
+import ast
 import re
 from typing import Callable, Any
 
@@ -67,9 +69,13 @@ class AIPLInterpreter:
             parts = line[1:].split(maxsplit=1)
             cmd, arg_line = parts[0], parts[1] if len(parts) > 1 else ""
             args = self.parse_args(arg_line)
-            if "v" not in args and prev_result is not None:
-                args["v"] = prev_result
-            return self.call_operator(cmd, **args)
+            op = self.operators.get(cmd)
+            if op:
+                if op.aipl_arity > len(args) and "v" not in args and prev_result is not None:
+                    args["v"] = prev_result
+                return self.call_operator(cmd, **args)
+            else:
+                raise ValueError(f"Unknown operator: {cmd}")
         else:
             return line
 
@@ -116,6 +122,11 @@ def op_randint(aipl: AIPLInterpreter, a: int, b: int) -> int:
 def op_format(aipl: AIPLInterpreter, v: Any, fmt: str) -> str:
     return fmt.format(v)
 
+
+# @defop("edit", rankin=0, rankout=0, arity=1)
+# def op_edit(aipl: AIPLInterpreter, *, line_number: int, new_line: str) -> None:
+#     aipl.script_lines[line_number - 1] = new_line
+
 # @defop("chain", rankin=0, rankout=0, arity=1)
 # def op_chain(aipl: AIPLInterpreter, v: Any, *funcs: Callable) -> Any:
 #     for func in funcs:
@@ -124,17 +135,12 @@ def op_format(aipl: AIPLInterpreter, v: Any, fmt: str) -> str:
 
 if __name__ == "__main__":
     script = """
-    # !join v=["hello", "world"] sep="- "
-    # !split sep="-"
-    # !sum v=[1, 2, 3, 4, 5]
-    # !print v="hegllo"
-    !input prompt="Enter your name: "
-    !format fmt="Hello, {}!"
+    !choice v=["a"]
     !print
-    !format v=3.14159265358979323846 fmt="{:.2f}"
+    !randint a=1 b=10
     !print
-    # !chain v=3.14159265358979323846 !format fmt="{:.2f}" !print
     """
+
 
     interpreter = AIPLInterpreter()
     result = interpreter.process_script(script)
@@ -153,19 +159,21 @@ rankout is what the function returns
 `2`: a whole table
 `arity` for how many operands it takes
 
-- types: string, number, list, dict, table, json
+- types: string, number, list (nested), dict, table, json
 
+- defer execution till all lines are parsed,
+    allowing forward references, and allowing for loops, inspection/modification of the script, etc.
+    - get a line by number as a string[] with `!lines`
+    - get a line by number as a parsed object with `!linesobj`
+    - get the whole script as a string[]
+- refer to output from an arbitrary line with `$` and the line number
+- allow editing of arbitrary lines with `!edit`
 
 - escape characters with `\` in strings
-- allow editing of arbitrary lines with `!edit`
-- refer to output from an arbitrary line with `$` and the line number
-- chain/curry multiple operators with `|>`
+- chain/curry multiple operators with `|>` (syntactic sugar for `!chain`)
 - split lines onto multiple lines with `\`
 - parallel processing with `&`
 - table processing with `|` and `||`
 - `?` is a query
 
-
-- support for f-strings with `!format`
-- take input from console with `!input`
 """
