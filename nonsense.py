@@ -165,19 +165,23 @@ def op_chain(aipl: AIPLInterpreter, v: Any, cmds: list[str]) -> Any:
 
 if __name__ == "__main__":
     script = """
-    !format fmt="Hello, {}!" v="world" |> print
+    !input prompt="Enter some text: "
+    !format fmt="You entered: {}"
+    !print
     """
 
     interpreter = AIPLInterpreter()
     result = interpreter.process_script(script)
 
 """
-- types: string, number, list, list of lists, dict, list of dicts
+- types: string, number, list (nested), dict, table, json
 
 - parallel processing with `&`
 - table processing with `|` and `||`
 - `?` is a query
 
+- escape characters with `\` in strings
+- chain/curry multiple operators with `|>` (syntactic sugar for `!chain`)
 - split lines onto multiple lines with `\`
 
 
