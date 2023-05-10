@@ -94,12 +94,12 @@ class AIPLInterpreter:
 
 
 # Operator implementations
-@defop("join", rankin=1, rankout=0, arity=1)
+@defop("join", rankin=1, rankout=0, arity=2)
 def op_join(aipl: AIPLInterpreter, v: list[str], sep=" ") -> str:
     return sep.join(v)
 
 
-@defop("split", rankin=1, rankout=1, arity=1)
+@defop("split", rankin=1, rankout=1, arity=2)
 def op_split(aipl: AIPLInterpreter, v: str, sep=" ") -> list[str]:
     return v.split(sep)
 
@@ -162,10 +162,18 @@ def op_chain(aipl: AIPLInterpreter, v: Any, cmds: list[str]) -> Any:
         result = aipl.call_operator(cmd_name, **args)
     return result
 
+@defop("map", rankin=1, rankout=1, arity=2)
+def op_map(aipl: AIPLInterpreter, v: list[Any], op: str) -> list[Any]:
+    return [aipl.call_operator(op, v=x) for x in v]
 
 if __name__ == "__main__":
     script = """
-    !format fmt="Hello, {}!" v="world" |> print
+    !input prompt="Enter some comma-separated numbers: "
+    !split sep=","
+    !map op="int"
+    !sum
+    !format fmt="The sum is {}"
+    !print
     """
 
     interpreter = AIPLInterpreter()
