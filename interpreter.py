@@ -18,6 +18,7 @@ def defop(name: str, rankin: int | float, rankout: int | float, arity: int) -> C
 class AIPLInterpreter:
     def __init__(self):
         self.operators: dict[str, Callable] = {}
+        self.results: list[Any] = []
         self.register_operators()
 
     def register_operators(self):
@@ -27,7 +28,7 @@ class AIPLInterpreter:
 
     def parse_args(self, arg_line: str) -> dict[str, Any]:
         args = {}
-        arg_parts = re.findall(r"(\w+)=((?:\[[^\]]*\])|(?:\"[^\"]*\")|\S+)", arg_line)
+        arg_parts = re.findall(r'(\w+)=((?:\[[^\]]*\])|(?:\"[^\"]*\")|\S+)', arg_line)
         for k, v in arg_parts:
             if v.startswith("[") and v.endswith("]"):
                 v = [self.parse_number_or_str(x.strip()) for x in v[1:-1].split(",")]
@@ -39,6 +40,12 @@ class AIPLInterpreter:
         return args
 
     def parse_number_or_str(self, value: str) -> Any:
+        if value.startswith("$") and value[1:].isdigit():
+            index = int(value[1:]) - 1
+            if 0 <= index < len(self.results):
+                return self.results[index]
+            else:
+                raise ValueError(f"Invalid result reference: {value}")
         try:
             return int(value)
         except ValueError:
@@ -50,49 +57,66 @@ class AIPLInterpreter:
                 else:
                     raise ValueError(f"Unquoted string: {value}")
 
+
+
     def call_operator(self, op_name: str, **kwargs) -> Any:
         op = self.operators.get(op_name)
         if op:
             return op(self, **kwargs)
         else:
             raise ValueError(f"Unknown operator: {op_name}")
-
-    def process_line(self, line: str, prev_result: Any) -> Any:
+        
+    def process_line(self, line: str) -> Any:
         line = line.strip()
         if not line or line.startswith("#"):
-            return prev_result
+            return self.results[-1] if self.results else None
 
         if line.startswith("!"):
-            cmds = line[1:].split("|>")
-            result = prev_result
-            for cmd in cmds:
-                cmd = cmd.strip()
-                parts = cmd.split(maxsplit=1)
-                cmd_name, arg_line = parts[0], parts[1] if len(parts) > 1 else ""
-                args = self.parse_args(arg_line)
-                op = self.operators.get(cmd_name)
-                if op:
-                    if op.aipl_arity > len(args) and "v" not in args:
-                        if result is not None:
-                            args["v"] = result
-                        else:
-                            remaining_args = op.aipl_arity - len(args)
-                            chain_args = [f"{cmd_name}"] + [None] * (remaining_args - 1)
-                            result = op_chain(self, result, chain_args)
-                            continue
-                    result = self.call_operator(cmd_name, **args)
-                else:
-                    raise ValueError(f"Unknown operator: {cmd_name}")
-            return result
+            return self.process_commands(line)
         else:
             return line
 
+    def process_commands(self, line: str) -> Any:
+        cmds = line[1:].split("|>")
+        result = self.results[-1] if self.results else None
+        for cmd in cmds:
+            cmd = cmd.strip()
+            op, args = self.parse_command(cmd)
+            result = self.apply_operator(op, args, result)
+        return result
+
+    def parse_command(self, cmd: str) -> tuple[str, dict[str, Any]]:
+        parts = cmd.split(maxsplit=1)
+        cmd_name, arg_line = parts[0], parts[1] if len(parts) > 1 else ""
+        args = self.parse_args(arg_line)
+        return cmd_name, args
+
+    def apply_operator(self, op_name: str, args: dict[str, Any], result: Any) -> Any:
+        op = self.operators.get(op_name)
+        if op:
+            if op.aipl_arity > len(args) and "v" not in args and self.results:
+                args["v"] = self.results[-1]
+            elif op.aipl_arity > len(args) and result is not None:
+                args["v"] = result
+            elif op.aipl_arity > len(args):
+                remaining_args = op.aipl_arity - len(args)
+                chain_args = [f"{op_name}"] + [None] * (remaining_args - 1)
+                result = op_chain(self, result, chain_args)
+                return result
+            if "v" not in args and result is not None and op.aipl_arity == len(args) + 1:
+                args["v"] = result
+            return self.call_operator(op_name, **args)
+        else:
+            raise ValueError(f"Unknown operator: {op_name}")
+
+
     def process_script(self, script: str) -> Any:
         lines = script.split("\n")
-        result = None
         for line in lines:
-            result = self.process_line(line, result)
-        return result
+            result = self.process_line(line)
+            self.results.append(result)
+        return self.results[-1]
+
 
 
 # Operator implementations
@@ -172,9 +196,10 @@ if __name__ == "__main__":
     script = """
     !input prompt="Enter some numbers: "
     !input prompt="Enter a separator: "
-    !split v=$1 sep=$2 |> map op="int" |> sum
-    !format fmt="The sum is {}"
-    !print
+    !print $1
+    # !split v=$1 sep=$2 |> map op="int" |> sum
+    # !format fmt="The sum is {}"
+    # !print
     """
 
     interpreter = AIPLInterpreter()
