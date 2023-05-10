@@ -72,12 +72,14 @@ class AIPLInterpreter:
                 args = self.parse_args(arg_line)
                 op = self.operators.get(cmd_name)
                 if op:
-                    if (
-                        op.aipl_arity > len(args)
-                        and "v" not in args
-                        and result is not None
-                    ):
-                        args["v"] = result
+                    if op.aipl_arity > len(args) and "v" not in args:
+                        if result is not None:
+                            args["v"] = result
+                        else:
+                            remaining_args = op.aipl_arity - len(args)
+                            chain_args = [f"{cmd_name}"] + [None] * (remaining_args - 1)
+                            result = op_chain(self, result, chain_args)
+                            continue
                     result = self.call_operator(cmd_name, **args)
                 else:
                     raise ValueError(f"Unknown operator: {cmd_name}")
@@ -168,10 +170,9 @@ def op_map(aipl: AIPLInterpreter, v: list[Any], op: str) -> list[Any]:
 
 if __name__ == "__main__":
     script = """
-    !input prompt="Enter some comma-separated numbers: "
-    !split sep=","
-    !map op="int"
-    !sum
+    !input prompt="Enter some numbers: "
+    !input prompt="Enter a separator: "
+    !split v=$1 sep=$2 |> map op="int" |> sum
     !format fmt="The sum is {}"
     !print
     """
