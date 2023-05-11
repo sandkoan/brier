@@ -41,8 +41,8 @@ class AIPLInterpreter:
 
     def parse_number_or_str(self, value: str) -> Any:
         if value.startswith("$") and value[1:].isdigit():
-            index = int(value[1:]) - 1
-            if 0 <= index < len(self.results):
+            index = int(value[1:])
+            if 0 < index < len(self.results):
                 return self.results[index]
             else:
                 raise ValueError(f"Invalid result reference: {value}")
@@ -96,14 +96,14 @@ class AIPLInterpreter:
         if op:
             if op.aipl_arity > len(args) and "v" not in args and self.results:
                 args["v"] = self.results[-1]
-            elif op.aipl_arity > len(args) and result is not None:
+            elif op.aipl_arity > len(args) and not result:
                 args["v"] = result
             elif op.aipl_arity > len(args):
                 remaining_args = op.aipl_arity - len(args)
                 chain_args = [f"{op_name}"] + [None] * (remaining_args - 1)
                 result = op_chain(self, result, chain_args)
                 return result
-            if "v" not in args and result is not None and op.aipl_arity == len(args) + 1:
+            if "v" not in args and not result and op.aipl_arity == len(args) + 1:
                 args["v"] = result
             return self.call_operator(op_name, **args)
         else:
@@ -196,10 +196,9 @@ if __name__ == "__main__":
     script = """
     !input prompt="Enter some numbers: "
     !input prompt="Enter a separator: "
-    !print $1
-    # !split v=$1 sep=$2 |> map op="int" |> sum
-    # !format fmt="The sum is {}"
-    # !print
+    !split v=$1 sep=$2 |> map op="int" |> sum
+    !format fmt="The sum is {}"
+    !print
     """
 
     interpreter = AIPLInterpreter()
