@@ -225,7 +225,6 @@ if __name__ == "__main__":
     result = interpreter.process_script(script)
 
 """
-* parsing separate file as a script
 * sqlite caching of expensive operations
 * types: string, number, list, list of lists, dict, list of dicts
 * chaining with |>
