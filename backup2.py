@@ -1,12 +1,7 @@
 import re
+import random
 from typing import Callable, Any
-from typing import get_type_hints, TypeVar
-from functools import partial
 
-
-def get_arg_types(func: Callable) -> list:
-    hints = get_type_hints(func)
-    return [hints[arg] for arg in hints if arg not in {'return', 'self'}]
 
 # Operator definition
 def defop(name: str, rankin: int | float, rankout: int | float, arity: int, needs_interpreter=False) -> Callable:
@@ -20,6 +15,11 @@ def defop(name: str, rankin: int | float, rankout: int | float, arity: int, need
 
     return decorator
 
+def apply_partial(func: Callable, *args: Any) -> Callable:
+    def wrapper(*remaining_args: Any):
+        return func(*args, *remaining_args)
+
+    return wrapper
 
 class AIPLInterpreter:
     def __init__(self):
@@ -82,6 +82,17 @@ class AIPLInterpreter:
         else:
             return line
 
+    # def process_commands(self, line: str) -> Any:
+    #     cmds = line[1:].split("|>")
+    #     result = self.results[-1] if self.results else None
+    #     composed = lambda x: x
+    #     for cmd in cmds:
+    #         cmd = cmd.strip()
+    #         op, args = self.parse_command(cmd)
+    #         partial_op = self.apply_operator(op, args, result)
+    #         composed = lambda x, f=partial_op, g=composed: f(g(x))
+    #     return composed(result)
+    
     def process_commands(self, line: str) -> Any:
         cmds = line[1:].split("|>")
         result = self.results[-1] if self.results else None
@@ -90,16 +101,8 @@ class AIPLInterpreter:
             cmd = cmd.strip()
             op, args = self.parse_command(cmd)
             partial_op = self.apply_operator(op, args, result)
-            
             if i == len(cmds) - 1:  # If this is the last command in the pipeline
-                if callable(partial_op):
-                    arity = partial_op.func.aipl_arity if hasattr(partial_op, "func") else 0
-                    if arity == len(args):
-                        return partial_op()  # Call the operator directly without passing the result
-                    else:
-                        return partial_op(result)
-                else:
-                    return partial_op
+                return partial_op(result) if callable(partial_op) else partial_op
             if partial_op is None:
                 continue  # Skip commands that return None
             composed = lambda x, f=partial_op, g=composed: f(g(x))
@@ -116,32 +119,20 @@ class AIPLInterpreter:
     def apply_operator(self, op_name: str, args: dict[str, Any], result: Any) -> Any:
         op = self.operators.get(op_name)
         if op:
-            arg_types = get_arg_types(op)
-            arity = len(arg_types)
-
-            # Match the result to the correct argument type
-            if result is not None and len(args) < arity:
-                for i, arg_type in enumerate(arg_types):
-                    if isinstance(result, arg_type) and i not in args:
-                        args[i] = result
-                        break
-
-            if arity > len(args):
+            if "v" not in args and result is not None and op.aipl_arity == len(args) + 1:
+                args["v"] = result
+            if op.aipl_arity > len(args):
                 if op.aipl_needs_interpreter:
-                    return partial(op, self, *list(args.values()))
+                    return apply_partial(op, self, *args.values())
                 else:
-                    return partial(op, *list(args.values()))
-
+                    return apply_partial(op, *args.values())
             else:
-                args_values = list(args.values())
                 if op.aipl_needs_interpreter:
-                    return op(self, *args_values)
+                    return op(self, *args.values())
                 else:
-                    return op(*args_values)
+                    return op(*args.values())
         else:
             raise ValueError(f"Unknown operator: {op_name}")
-
-
 
     def process_script(self, script: str) -> Any:
         lines = script.split("\n")
@@ -153,15 +144,77 @@ class AIPLInterpreter:
 
 
 # Operator implementations
+# @defop("join", rankin=1, rankout=0, arity=2)
+# def op_join(aipl: AIPLInterpreter, v: list[str], sep=" ") -> str:
+#     return sep.join(v)
+
+
+# @defop("split", rankin=1, rankout=1, arity=2)
+# def op_split(aipl: AIPLInterpreter, v: str, sep=" ") -> list[str]:
+#     return v.split(sep)
+
+
+# @defop("sum", rankin=1, rankout=0, arity=1)
+# def op_sum(aipl: AIPLInterpreter, v: list[float]) -> float:
+#     return sum(v)
+
+
+# @defop("int", rankin=0, rankout=0, arity=1)
+# def op_int(aipl: AIPLInterpreter, v: Any) -> int:
+#     return int(v)
+
+
+# @defop("float", rankin=0, rankout=0, arity=1)
+# def op_float(aipl: AIPLInterpreter, v: Any) -> float:
+#     return float(v)
+
+
 @defop("print", rankin=1, rankout=1, arity=1)
 def op_print(v: str) -> str:
     print(v)
     return v
 
+
 @defop("input", rankin=0, rankout=0, arity=1)
 def op_input(prompt: str = "") -> str:
     return input(prompt)
 
+
+# @defop("choice", rankin=1, rankout=0, arity=1)
+# def op_choice(aipl: AIPLInterpreter, v: list[Any]) -> Any:
+#     return random.choice(v)
+
+
+# @defop("randint", rankin=0, rankout=0, arity=2)
+# def op_randint(aipl: AIPLInterpreter, a: int, v: int) -> int:
+#     return random.randint(a, v)
+
+
+# @defop("format", rankin=0, rankout=0, arity=2)
+# def op_format(aipl: AIPLInterpreter, fmt: str, v: Any) -> str:
+#     return fmt.format(v)
+
+
+# @defop("+", rankin=0, rankout=0, arity=2)
+# def op_add(aipl: AIPLInterpreter, a: Any, v: Any) -> Any:
+#     return a + v
+
+
+# @defop("chain", rankin=1, rankout=1, arity=2)
+# def op_chain(aipl: AIPLInterpreter, v: Any, cmds: list[str]) -> Any:
+#     result = v
+#     for cmd in cmds:
+#         parts = cmd.split(maxsplit=1)
+#         cmd_name, arg_line = parts[0], parts[1] if len(parts) > 1 else ""
+#         args = aipl.parse_args(arg_line)
+#         if "v" not in args:
+#             args["v"] = result
+#         result = aipl.call_operator(cmd_name, **args)
+#     return result
+
+# @defop("map", rankin=1, rankout=1, arity=2)
+# def op_map(aipl: AIPLInterpreter, v: list[Any], op: str) -> list[Any]:
+#     return [aipl.call_operator(op, v=x) for x in v]
 
 @defop("inspect", rankin=0, rankout=0, arity=1, needs_interpreter=True)
 def op_inspect_op(aipl: AIPLInterpreter, op_name: str) -> str:
@@ -178,12 +231,10 @@ def op_inspect_op(aipl: AIPLInterpreter, op_name: str) -> str:
 
 if __name__ == "__main__":
     script = """
-    !input prompt="Enter name: "
-    !input prompt="Enter function: "
+    !input prompt="Enter an operator to inspect: "
+    !input prompt="Enter a value: "
     !inspect
-    !input prompt="just viibing: "
-    !print v=$1
-    !print v=$4
+    !print $0
     """
 
     interpreter = AIPLInterpreter()
