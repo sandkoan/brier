@@ -30,6 +30,7 @@ def defop(
 
 class AIPLInterpreter:
     def __init__(self):
+        self.script: str = ""
         self.operators: dict[str, Callable] = {}
         self.results: list[Any] = []
         self.register_operators()
@@ -113,23 +114,6 @@ class AIPLInterpreter:
             composed = lambda x, f=partial_op, g=composed: f(g(x))
         return composed(result)
 
-    # def parse_command(self, cmd: str) -> tuple[str, dict[str, Any]]:
-    #     parts = cmd.split(maxsplit=1)
-    #     cmd_name, arg_line = parts[0], parts[1] if len(parts) > 1 else ""
-
-    #     if (
-    #         "=" not in arg_line
-    #     ):  # If there are no named arguments, treat as positional arguments
-    #         arg_values = arg_line.split()
-    #         arg_values = [
-    #             self.parse_number_or_str(v) for v in arg_values
-    #         ]  # Replace numbers prefixed with $
-    #         arg_names = [i for i in range(len(arg_values))]
-    #         args = dict(zip(arg_names, arg_values))
-    #     else:
-    #         args = self.parse_args(arg_line)
-
-    #     return cmd_name, args
     def parse_command(self, cmd: str) -> tuple[str, dict[str, Any]]:
         parts = cmd.split(maxsplit=1)
         cmd_name, arg_line = parts[0], parts[1] if len(parts) > 1 else ""
@@ -147,34 +131,6 @@ class AIPLInterpreter:
         return cmd_name, args
 
 
-    # def apply_operator(self, op_name: str, args: dict[str, Any], result: Any) -> Any:
-    #     op = self.operators.get(op_name)
-    #     if op:
-    #         arg_types = get_arg_types(op)
-    #         arity = len(arg_types)
-
-    #         # Match the result to the correct argument type
-    #         if result is not None and len(args) < arity:
-    #             for i, arg_type in enumerate(arg_types):
-    #                 if isinstance(result, arg_type) and i not in args:
-    #                     args[i] = result
-    #                     break
-
-    #         if arity > len(args):
-    #             if op.aipl_needs_interpreter:
-    #                 return partial(op, self, *list(args.values()))
-    #             else:
-    #                 return partial(op, *list(args.values()))
-
-    #         else:
-    #             args_values = list(args.values())
-    #             if op.aipl_needs_interpreter:
-    #                 return op(self, *args_values)
-    #             else:
-    #                 return op(*args_values)
-    #     else:
-    #         raise ValueError(f"Unknown operator: {op_name}")
-
     def apply_operator(self, op_name: str, args: dict[str, Any], result: Any) -> Any:
         op = self.operators.get(op_name)
         if op:
@@ -182,7 +138,7 @@ class AIPLInterpreter:
             arity = len(arg_types)
 
             # Match the result to the correct argument type
-            if result is not None and len(args) < arity:
+            if not result and len(args) < arity and not (op.aipl_needs_interpreter and len(args) == arity - 1):
                 for i, arg_type in enumerate(arg_types):
                     # Use arg_type.__origin__ if it exists, otherwise use arg_type
                     base_type = arg_type.__origin__ if hasattr(arg_type, "__origin__") else arg_type
@@ -206,8 +162,8 @@ class AIPLInterpreter:
 
 
     def process_script(self, script: str) -> Any:
-        lines = script.split("\n")
-        for line in lines:
+        self.script = script.split("\n")
+        for line in self.script:
             result = self.process_line(line)
             self.results.append(result)
         return self.results[-1]
@@ -226,14 +182,12 @@ def op_input(prompt: str = "") -> str:
 @defop("inspect", rankin=0, rankout=0, arity=1, needs_interpreter=True)
 def op_inspect_op(aipl: AIPLInterpreter, op_name: str) -> str:
     import inspect
-
     op = aipl.operators.get(op_name)
     if op:
         print(f"Inspecting operator: {op_name}")
         print(inspect.getsource(op))
     else:
         print(f"Operator not found: {op_name}")
-
     return op_name
 
 @defop("join", rankin=1, rankout=0, arity=2)
@@ -268,12 +222,22 @@ def op_add(a: Any, b: Any) -> Any:
 def op_map_int(l: list[Any]) -> list[Any]:
     return [int(x) for x in l]
 
+@defop("map", rankin=1, rankout=1, arity=2, needs_interpreter=True)
+def op_map(aipl: AIPLInterpreter, op: str, l: list[Any]) -> list[Any]:
+    print(f"Mapping {op} over {l}")
+    result = aipl.results[-1] if aipl.results else None
+    return [aipl.apply_operator(op, {"$": x}, ) for x in l]
+
+
 if __name__ == "__main__":
+    # Current TODO: issue with mixing positional args and named args in the same command call: e.g., `!map op=int` and the previous value/list being passed in implicitly
     script = """
     !input prompt="Enter numbers: "
     !input prompt="Enter sep: "
-    !split s=$1 sep=$2
-    !map_int
+    !split $1 $2
+    !print
+    !map op="int" l=$-1
+    # !map_int
     !sum
     !format fmt="Sum: {}" v=$-1
     !print
@@ -283,20 +247,11 @@ if __name__ == "__main__":
     result = interpreter.process_script(script)
 
 """
-- types: string, number, list, list of lists, dict, list of dicts
+* sqlite caching of expensive operations
+* triple quotes for multiline strings
+* parsing separate file as a script
+* types: string, number, list, list of lists, dict, list of dicts
 
-- parallel processing with `&`
+- parallel processing with `&` prefixing any operator 
 - table processing with `|` and `||`
-- `?` is a query
-
-- split lines onto multiple lines with `\`
-
-
-- defer execution till all lines are parsed,
-    allowing forward references, and allowing for loops, inspection/modification of the script, etc.
-    - get a line by number as a string[] with `!lines`
-    - get a line by number as a parsed object with `!linesobj`
-    - get the whole script as a string[]
-- refer to output from an arbitrary line with `$` and the line number
-- allow modification of arbitrary lines with `!edit`
 """
