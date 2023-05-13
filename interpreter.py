@@ -85,13 +85,6 @@ class AIPLInterpreter:
 
         return cmd_name, args
 
-    def parse_args(self, arg_line: str) -> dict[str, Any]:
-        args = {}
-        arg_parts = re.findall(r"(\w+)=((?:\[[^\]]*\])|(?:\"[^\"]*\")|\S+)", arg_line)
-        for k, v in arg_parts:
-            args[k] = self.parse_value(v)
-        return args
-        
     def parse_value(self, value: str) -> Any:
         if value.startswith("[") and value.endswith("]"):
             return [self.parse_number_or_str(x.strip()) for x in value[1:-1].split(",")]
@@ -214,23 +207,25 @@ def op_add(a: Any, b: Any) -> Any:
 def op_map_int(l: list[Any]) -> list[int]:
     return [int(x) for x in l]
 
+@defop("map", rankin=1, rankout=1, arity=3, needs_interpreter=True)
+def op_map(aipl: AIPLInterpreter, op_name: str, l: list[Any]) -> list[Any]:
+    prev = aipl.get_last_result()
+    return [aipl.apply_operator(op_name, {0: x}, prev) for x in l]
+
 
 if __name__ == "__main__":
     script = """
-    !print "This is a multiline string.\\nIt has multiple lines.\\nYou can include quotes like this: \\" and use escape sequences like: \\\\."
-    ?print
+    # !print "This is a multiline string.\\nIt has multiple lines.\\nYou can include quotes like this: \\" and use escape sequences like: \\\\."
+    # ?print
+    !input "Enter a list of numbers: "
+    !input "Enter a separator: "
+    !split s=$-2 sep=$-1
+    !print
+    !input "Enter a map operator: "
+    !map $-1 $5
+    !sum
+    !print
     """
 
     interpreter = AIPLInterpreter()
     result = interpreter.process_script(script)
-
-"""
-* sqlite caching of expensive operations
-* types: string, number, list, list of lists, dict, list of dicts
-* chaining with |>
-
-- parallel processing with `&` prefixing any operator 
-- table processing with `|` and `||`
-* triple quotes for multiline strings
-* repl
-"""
